@@ -29,7 +29,7 @@ class CustomArg:
 
 
 ### `rlg_train.py`
-删除了不必要的函数 `run_rlg()` ，并对前面的库函数调用部分做了修改。
+删除了不必要的函数 `run_rlg()` ，并对前面的库函数调用部分做了修改，将函数 `parse_vec_task` 和函数 `create_rlgpu_env2` 移到新文件 `rlg_env.py` （同级文件夹）中，避免了文件重复调用问题。
 
 
 ### `ppo.py` 、 `sac.py` 、 `ddpg.py` 、 `td3.py`
