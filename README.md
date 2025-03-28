@@ -3,7 +3,7 @@
 
 
 ## 项目简介
-在项目 [Leibniz Gym](https://github.com/pairlab/leibnizgym) 基础上，参考项目 [leibnizgym_copy](https://github.com/wqqqqqqw/leibnizgym_copy) 和项目 [tri-fingers](https://github.com/wty-yy/tri-fingers) ，并在项目 [trifinger-gym-train](https://github.com/wty-yy/trifinger-gym-train) 基础上做了一些修改，构建较为完善的三指机器人仿真训练及测试环境，支持 `ppo` 、 `sac` 、 `cql` 等多个强化学习算法。
+在项目 [Leibniz Gym](https://github.com/pairlab/leibnizgym) 基础上，参考项目 [leibnizgym_copy](https://github.com/wqqqqqqw/leibnizgym_copy) 和项目 [tri-fingers](https://github.com/wty-yy/tri-fingers) ，并在项目 [trifinger-gym-train](https://github.com/wty-yy/trifinger-gym-train) 基础上做了一些修改，构建较为完善的三指机器人仿真训练及测试环境，支持 `ppo` 、 `sac` 、 `cql` 、 `ddpg` 、 `td3` 等多个强化学习算法。
 
 
 
@@ -28,10 +28,10 @@ class CustomArg:
 具体用法见[tyro官方网站](https://pypi.org/project/tyro/)。
 
 
-### `rlg_hydra.py`
-删除了不必要的函数 `run_tlg()` ，并对前面的库函数调用部分做了修改。
+### `rlg_train.py`
+删除了不必要的函数 `run_rlg()` ，并对前面的库函数调用部分做了修改。
 
 
-### `ppo.py` 和 `sac.py`
+### 算法代码
 完善测试、训练流程，checkpoint保存位置，优化代码写法。
 
