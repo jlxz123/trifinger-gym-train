@@ -1,23 +1,24 @@
-# docs and experiment results can be found at https://docs.cleanrl.dev/rl-algorithms/td3/#td3_continuous_actionpy
+# python
 import os
 import random
 import time
 from dataclasses import dataclass
 from pathlib import Path
 import datetime
-
-# import gymnasium as gym
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-
 from torch.utils.tensorboard import SummaryWriter
-from leibnizgym.utils import rlg_train
-from leibnizgym.utils.torch_utils import unscale_transform
-import gym
 from tqdm import trange
+
+# gym
+import gym
+
+# leibnizgym
+from leibnizgym.utils.rlg_env import create_rlgpu_env
+from leibnizgym.utils.torch_utils import unscale_transform
 
 
 @dataclass
@@ -212,7 +213,7 @@ def test(hydra_cfg):
     cli_args = hydra_cfg.args
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    envs = rlg_train.create_rlgpu_env2(task_cfg=gym_cfg, cli_args=cli_args)
+    envs = create_rlgpu_env(task_cfg=gym_cfg, cli_args=cli_args)
 
     record = True
     if record:
@@ -336,7 +337,7 @@ def train(hydra_cfg):
     # env setup
     # envs = gym.vector.SyncVectorEnv([make_env(args.env_id, args.seed, 0, args.capture_video, run_name)])
     # assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
-    envs = rlg_train.create_rlgpu_env2(task_cfg=gym_cfg, cli_args=cli_args)
+    envs = create_rlgpu_env(task_cfg=gym_cfg, cli_args=cli_args)
     single_action_space = envs.action_space
     single_observation_space = envs.observation_space
     print(single_action_space.shape, single_observation_space)

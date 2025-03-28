@@ -1,4 +1,4 @@
-import leibnizgym.scripts.ppo_tt as ppo_tt
+import leibnizgym.scripts.ppo_tt as ppo
 import leibnizgym.scripts.cql as cql
 import leibnizgym.scripts.sacn as sacn
 import leibnizgym.scripts.sac as sac

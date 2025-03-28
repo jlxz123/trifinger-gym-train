@@ -1,60 +1,26 @@
-# Copyright (c) 2018-2022, NVIDIA Corporation
-# All rights reserved.
-#
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions are met:
-#
-# 1. Redistributions of source code must retain the above copyright notice, this
-#    list of conditions and the following disclaimer.
-#
-# 2. Redistributions in binary form must reproduce the above copyright notice,
-#    this list of conditions and the following disclaimer in the documentation
-#    and/or other materials provided with the distribution.
-#
-# 3. Neither the name of the copyright holder nor the names of its
-#    contributors may be used to endorse or promote products derived from
-#    this software without specific prior written permission.
-#
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
-# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-# docs and experiment results can be found at https://docs.cleanrl.dev/rl-algorithms/ppo/#ppo_continuous_action_isaacgympy
+# python
 import os
 import random
 import time
 from dataclasses import dataclass
 from pathlib import Path
 import datetime
-
-import gym
-import isaacgym  # noqa
-
-# import isaacgymenvs
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import tyro
 from torch.distributions.normal import Normal
 from torch.utils.tensorboard import SummaryWriter
-from leibnizgym.utils import *
-from leibnizgym.utils.torch_utils import (
-    saturate,
-    unscale_transform,
-    scale_transform,
-    quat_diff_rad,
-)
-
-import leibnizgym.utils.rlg_train as rlg_train
 from tqdm import trange
+
+# gym
+import gym
+import isaacgym  # noqa
+
+# leibnizgym
+from leibnizgym.utils import *
+from leibnizgym.utils.torch_utils import unscale_transform
+from leibnizgym.utils.rlg_env import create_rlgpu_env
 
 
 @dataclass
@@ -232,7 +198,7 @@ def test(hydra_cfg):
     rlg_cfg = OmegaConf.to_container(hydra_cfg.rlg)
     cli_args = hydra_cfg.args
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    envs = rlg_train.create_rlgpu_env2(task_cfg=gym_cfg, cli_args=cli_args)
+    envs = create_rlgpu_env(task_cfg=gym_cfg, cli_args=cli_args)
 
     record = True
     if record:
@@ -352,7 +318,7 @@ def train(hydra_cfg):
 
     # env setup
     # env = TrifingerEnv(config=gym_cfg, device='cpu', verbose=True, visualize=True)
-    envs = rlg_train.create_rlgpu_env2(task_cfg=gym_cfg, cli_args=cli_args)
+    envs = create_rlgpu_env(task_cfg=gym_cfg, cli_args=cli_args)
     """
     envs = isaacgymenvs.make(
         seed=args.seed,
