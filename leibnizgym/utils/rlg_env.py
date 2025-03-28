@@ -1,7 +1,7 @@
 # leibnizgym
 from leibnizgym.wrappers.vec_task import VecTaskPython
 from leibnizgym.utils.errors import InvalidTaskNameError
-from leibnizgym.utils.message import *
+from leibnizgym.utils.message import print_info
 
 # rl-games
 from rl_games.common import wrappers
