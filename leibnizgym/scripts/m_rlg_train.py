@@ -35,14 +35,24 @@ from datetime import datetime
 from copy import deepcopy
 from rl_games.algos_torch import model_builder
 
-from leibnizgym.scripts import ppo, cql, sacn, sac, ddpg, td3
-# import sac as sac
-# import ppo as ppo
-# import m_cql as cql
+# from document.leibnizgym.scripts import ppo_continuous_action_isaacgym
+# 这种写法不优美建议如下写法
+# import sys
+# sys.path.append('/data/user/wanqiang/document/leibnizgym/scripts')
+# import ppo_tt
+# import cql
+# import sacn
+# import sac
+# import ddpg
+# import td3
+# from leibnizgym.scripts import ppo_tt, cql, sacn, sac, ddpg, td3
+import sac as sac
+import ppo as ppo
+import m_cql as cql
 
-# # import m_sacn as sacn
-# import ddpg as ddpg
-# import td3 as td3
+# import m_sacn as sacn
+import ddpg as ddpg
+import td3 as td3
 
 
 def parse_vec_task(args: argparse.Namespace, cfg: dict) -> VecTaskPython:

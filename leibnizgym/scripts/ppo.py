@@ -31,10 +31,13 @@ import os
 import random
 import time
 from dataclasses import dataclass
+from pathlib import Path
+import datetime
 
 import gym
 import isaacgym  # noqa
-#import isaacgymenvs
+
+# import isaacgymenvs
 import numpy as np
 import torch
 import torch.nn as nn
@@ -42,15 +45,17 @@ import torch.optim as optim
 import tyro
 from torch.distributions.normal import Normal
 from torch.utils.tensorboard import SummaryWriter
-import sys
 from leibnizgym.utils import *
-from leibnizgym.envs import TrifingerEnv
-from leibnizgym.utils.torch_utils import saturate, unscale_transform, scale_transform, quat_diff_rad
-# 不要像这样写, leibnizgym已经用pip安装过了, 直接掉包即可
-# sys.path.append('/data/user/wanqiang/document/leibnizgym/leibnizgym/utils')
-# import rlg_train 
+from leibnizgym.utils.torch_utils import (
+    saturate,
+    unscale_transform,
+    scale_transform,
+    quat_diff_rad,
+)
+
 import leibnizgym.utils.rlg_train as rlg_train
 from tqdm import trange
+
 
 @dataclass
 class Args:
@@ -64,8 +69,8 @@ class Args:
     """if toggled, cuda will be enabled by default"""
     track: bool = False
     """if toggled, this experiment will be tracked with Weights and Biases"""
-    wandb_project_name: str = "cleanRL"
-    wandb_group: str="PPO"
+    wandb_project_name: str = "Trifinger_ppo"
+    wandb_group: str = "PPO"
     """the wandb's project name"""
     wandb_entity: str = None
     """the entity (team) of wandb's project"""
@@ -77,8 +82,8 @@ class Args:
     """the id of the environment"""
     total_timesteps: int = 900000000
     """total timesteps of the experiments"""
-    learning_rate: float = 3e-4 #0.0036
-    min_learning_rate: float=3e-4
+    learning_rate: float = 3e-4  # 0.0036
+    min_learning_rate: float = 3e-4
     """the learning rate of the optimizer"""
     num_envs: int = 4096
     """the number of parallel game environments"""
@@ -120,11 +125,11 @@ class Args:
     """the mini-batch size (computed in runtime)"""
     num_iterations: int = 0
     """the number of iterations (computed in runtime)"""
-    action_noise: float=0.1
-    cube_pos_noise:float=0.1
-    noise_clip:float=0.2
-    action_domain_randomization: bool=True
-    cube_domain_randomization: bool=True
+    action_noise: float = 0.1
+    cube_pos_noise: float = 0.1
+    noise_clip: float = 0.2
+    action_domain_randomization: bool = True
+    cube_domain_randomization: bool = True
 
 
 class RecordEpisodeStatisticsTorch(gym.Wrapper):
@@ -137,10 +142,18 @@ class RecordEpisodeStatisticsTorch(gym.Wrapper):
 
     def reset(self, **kwargs):
         observations = super().reset(**kwargs)
-        self.episode_returns = torch.zeros(self.num_envs, dtype=torch.float32, device=self.device)
-        self.episode_lengths = torch.zeros(self.num_envs, dtype=torch.int32, device=self.device)
-        self.returned_episode_returns = torch.zeros(self.num_envs, dtype=torch.float32, device=self.device)
-        self.returned_episode_lengths = torch.zeros(self.num_envs, dtype=torch.int32, device=self.device)
+        self.episode_returns = torch.zeros(
+            self.num_envs, dtype=torch.float32, device=self.device
+        )
+        self.episode_lengths = torch.zeros(
+            self.num_envs, dtype=torch.int32, device=self.device
+        )
+        self.returned_episode_returns = torch.zeros(
+            self.num_envs, dtype=torch.float32, device=self.device
+        )
+        self.returned_episode_lengths = torch.zeros(
+            self.num_envs, dtype=torch.int32, device=self.device
+        )
         return observations
 
     def step(self, action):
@@ -184,7 +197,9 @@ class Agent(nn.Module):
             nn.Tanh(),
             layer_init(nn.Linear(256, np.prod(envs.action_space.shape)), std=0.01),
         )
-        self.actor_logstd = nn.Parameter(torch.zeros(1, np.prod(envs.action_space.shape)))
+        self.actor_logstd = nn.Parameter(
+            torch.zeros(1, np.prod(envs.action_space.shape))
+        )
 
     def get_value(self, x):
         return self.critic(x)
@@ -197,113 +212,112 @@ class Agent(nn.Module):
         probs = Normal(action_mean, action_std)
         if action is None:
             action = probs.sample()
-        return action, probs.log_prob(action).sum(1), probs.entropy().sum(1), self.critic(x)
+        return (
+            action,
+            probs.log_prob(action).sum(1),
+            probs.entropy().sum(1),
+            self.critic(x),
+        )
 
 
 class ExtractObsWrapper(gym.ObservationWrapper):
     def observation(self, obs):
         return obs["obs"]
 
+
 def test(hydra_cfg):
-    
     from omegaconf import OmegaConf
+
     gym_cfg = OmegaConf.to_container(hydra_cfg.gym)
     rlg_cfg = OmegaConf.to_container(hydra_cfg.rlg)
-    cli_args= hydra_cfg.args
-    args = tyro.cli(Args)
-    device = torch.device("cuda" if torch.cuda.is_available()  else "cpu")
-    envs=rlg_train.create_rlgpu_env2(task_cfg=gym_cfg,cli_args=cli_args)
-    record=True
+    cli_args = hydra_cfg.args
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    envs = rlg_train.create_rlgpu_env2(task_cfg=gym_cfg, cli_args=cli_args)
+
+    record = True
     if record:
+        import os
         import csv
-        from pathlib import Path
-        path=Path(__file__).parents[1]
-        path=path/'experient'
-        path=os.path.join(path,'ppo_cube_noise.csv')
-        
-        with open(path,"w")as csvfile:
-            writer=csv.writer(csvfile)
-            b=['target','object','success','steps']
-            writer.writerow(b)
+
+        path = Path(__file__).parents[3] / "experient"
+        os.makedirs(path, exist_ok=True)  # 确保目录存在
+
+        csv_file = path / "ppo_cube_noise.csv"  # ✅ 确保 path 指向的是文件
+        file_exists = csv_file.exists()
+
+        with open(csv_file, "a", newline="") as csvfile:
+            writer = csv.writer(csvfile)
+            if not file_exists:  # 只有当文件不存在时才写入表头
+                writer.writerow(["target", "object", "success", "steps"])
+
+        # 在循环之前写入代码运行的时间
+        current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with open(csv_file, "a", newline="", encoding="utf-8") as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow([f"时间：{current_time}"])
+
     agent = Agent(envs).to(device)
-    optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
-    if 'checkpoint' in cli_args and cli_args['checkpoint'] is not None and cli_args['checkpoint'] !='':
-        filename=cli_args['checkpoint']
+    if (
+        "checkpoint" in cli_args
+        and cli_args["checkpoint"] is not None
+        and cli_args["checkpoint"] != ""
+    ):
+        filename = cli_args["checkpoint"]
         print(f"载入模型：{filename}")
-        checkpoint=torch.load(filename)
+        checkpoint = torch.load(filename)
         agent.load_state_dict(checkpoint)
-    for _ in trange(5000):
-        obs=envs.reset()
-        obs[:,9:18]=0
-        # print(obs)
-        get_pos=obs.clone()
-        obs_trans=unscale_transform(
-                        get_pos[0],
-                        lower=envs.obs_scale.low,
-                        upper=envs.obs_scale.high
-                    )
-        step=0
-        object=obs_trans[18:21].detach().squeeze().cpu().numpy()
-        target=obs_trans[25:28].detach().squeeze().cpu().numpy()
-        # print(target,object)
 
-        success=0
-        while (success==0) &(step<100):
-            # print(obs)
+    print("-" * 20 + "开始PPO模型测试" + "-" * 20)
 
-            action=agent.actor_mean(obs)
-            action=torch.clip(action,-1,1)
+    for i in trange(5000):
+        obs = envs.reset()
+        obs[:, 9:18] = 0
+        get_pos = obs.clone()
+        obs_trans = unscale_transform(
+            get_pos[0], lower=envs.obs_scale.low, upper=envs.obs_scale.high
+        )
+        step = 0
+        object = obs_trans[18:21].detach().squeeze().cpu().numpy()
+        target = obs_trans[25:28].detach().squeeze().cpu().numpy()
+
+        success = 0
+        while (success == 0) & (step < 100):
+            action = agent.actor_mean(obs)
+            action = torch.clip(action, -1, 1)
             nex_obs, rewards, next_done, info = envs.step(action)
-            nex_obs[:,9:18]=0
-            success=next_done.detach().squeeze().cpu().numpy()
-            obs=nex_obs.clone()
-            step+=1
+            nex_obs[:, 9:18] = 0
+            success = next_done.detach().squeeze().cpu().numpy()
+            obs = nex_obs.clone()
+            step += 1
+
         if record:
-            
-            data=np.append(target,object)
-            data=np.append(data,success)
-            data=np.append(data,step)
-            # print(data)
-            with open(path,"a")as csvfile:
-                writer=csv.writer(csvfile)
+            # 写入当前轮次信息
+            round_info = [f"第{i + 1}轮测试："]  # 当前轮次的描述，您可以根据需求修改
+            with open(csv_file, "a", newline="", encoding="utf-8") as csvfile:
+                writer = csv.writer(csvfile)
+
+                # 写入当前轮次
+                writer.writerow(round_info)
+
+                # 记录 target, object, success, step 的数据
+                data = np.append(target, object)
+                data = np.append(data, success)
+                data = np.append(data, step)
+
+                # 写入数据
                 writer.writerow(data)
-def play(hydra_cfg):
-    from omegaconf import OmegaConf
-    gym_cfg = OmegaConf.to_container(hydra_cfg.gym)
-    rlg_cfg = OmegaConf.to_container(hydra_cfg.rlg)
-    cli_args= hydra_cfg.args
-    args = tyro.cli(Args)
-    device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
-    envs=rlg_train.create_rlgpu_env2(gym_cfg=gym_cfg,cli_args=cli_args)
-    agent = Agent(envs).to(device)
-    optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
-    if 'checkpoint' in cli_args and cli_args['checkpoint'] is not None and cli_args['checkpoint'] !='':
-        filename=cli_args['checkpoint']
-        print(f"载入模型：{filename}")
-        checkpoint=torch.load(filename)
-        agent.load_state_dict(checkpoint)
-    obs=envs.reset()
-    obs[:,9:18]=0
-    for _ in range(750*10):
-        
-        action=agent.actor_mean(obs)
-        obs, rewards, next_done, info = envs.step(action)
-        obs[:,9:18]=0
-        
-        #print(action)
-        #print(rewards)
-        
 
 
 def train(hydra_cfg):
     from omegaconf import OmegaConf
+
     gym_cfg = OmegaConf.to_container(hydra_cfg.gym)
     rlg_cfg = OmegaConf.to_container(hydra_cfg.rlg)
-    cli_args= hydra_cfg.args
-    args = tyro.cli(Args)
-    args.num_envs=cli_args.num_envs
-    args.track= not cli_args.wandb_log
+    cli_args = hydra_cfg.args
+    args = Args()
+    args.num_envs = cli_args.num_envs
+    args.track = not cli_args.wandb_log
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
     args.num_iterations = args.total_timesteps // args.batch_size
@@ -324,7 +338,8 @@ def train(hydra_cfg):
     writer = SummaryWriter(f"runs/{run_name}")
     writer.add_text(
         "hyperparameters",
-        "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
+        "|param|value|\n|-|-|\n%s"
+        % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
     )
 
     # TRY NOT TO MODIFY: seeding
@@ -336,9 +351,9 @@ def train(hydra_cfg):
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
     # env setup
-    #env = TrifingerEnv(config=gym_cfg, device='cpu', verbose=True, visualize=True)
-    envs=rlg_train.create_rlgpu_env2(task_cfg=gym_cfg,cli_args=cli_args)
-    '''
+    # env = TrifingerEnv(config=gym_cfg, device='cpu', verbose=True, visualize=True)
+    envs = rlg_train.create_rlgpu_env2(task_cfg=gym_cfg, cli_args=cli_args)
+    """
     envs = isaacgymenvs.make(
         seed=args.seed,
         task=args.env_id,
@@ -351,7 +366,7 @@ def train(hydra_cfg):
         virtual_screen_capture=args.capture_video,
         force_render=False,
     )
-    '''
+    """
     if args.capture_video:
         envs.is_vector_env = True
         print(f"record_video_step_frequency={args.record_video_step_frequency}")
@@ -361,68 +376,81 @@ def train(hydra_cfg):
             step_trigger=lambda step: step % args.record_video_step_frequency == 0,
             video_length=100,  # for each video record up to 100 steps
         )
-    #envs = ExtractObsWrapper(envs)
-    #envs = RecordEpisodeStatisticsTorch(envs, device)
+    # envs = ExtractObsWrapper(envs)
+    # envs = RecordEpisodeStatisticsTorch(envs, device)
 
     single_action_space = envs.action_space
     single_observation_space = envs.observation_space
-    print(single_action_space,single_observation_space)
-    assert isinstance(envs.action_space, gym.spaces.Box), "only continuous action space is supported"
+    print(single_action_space, single_observation_space)
+    assert isinstance(envs.action_space, gym.spaces.Box), (
+        "only continuous action space is supported"
+    )
 
     agent = Agent(envs).to(device)
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
-    if 'checkpoint' in cli_args and cli_args['checkpoint'] is not None and cli_args['checkpoint'] !='':
-        filename=cli_args['checkpoint']
+    if (
+        "checkpoint" in cli_args
+        and cli_args["checkpoint"] is not None
+        and cli_args["checkpoint"] != ""
+    ):
+        filename = cli_args["checkpoint"]
         print(f"载入模型：{filename}")
-        checkpoint=torch.load(filename)
+        checkpoint = torch.load(filename)
         agent.load_state_dict(checkpoint)
 
     # ALGO Logic: Storage setup
-    obs = torch.zeros((args.num_steps, args.num_envs) + envs.observation_space.shape, dtype=torch.float).to(device)
-    actions = torch.zeros((args.num_steps, args.num_envs) + envs.action_space.shape, dtype=torch.float).to(device)
-    logprobs = torch.zeros((args.num_steps, args.num_envs), dtype=torch.float).to(device)
+    obs = torch.zeros(
+        (args.num_steps, args.num_envs) + envs.observation_space.shape,
+        dtype=torch.float,
+    ).to(device)
+    actions = torch.zeros(
+        (args.num_steps, args.num_envs) + envs.action_space.shape, dtype=torch.float
+    ).to(device)
+    logprobs = torch.zeros(
+        (args.num_steps, args.num_envs),
+        dtype=torch.float,
+    ).to(device)
     rewards = torch.zeros((args.num_steps, args.num_envs), dtype=torch.float).to(device)
     dones = torch.zeros((args.num_steps, args.num_envs), dtype=torch.bool).to(device)
     values = torch.zeros((args.num_steps, args.num_envs), dtype=torch.float).to(device)
     advantages = torch.zeros_like(rewards, dtype=torch.float).to(device)
 
-    #domain_randomization
+    # domain_randomization
     if args.action_domain_randomization:
-        rand_fre=200    
-        dof_offset=(torch.randn(9,dtype=torch.float32,device=device)*args.action_noise).clamp(-args.noise_clip,args.noise_clip)
+        rand_fre = 200
+        dof_offset = (
+            torch.randn(9, dtype=torch.float32, device=device) * args.action_noise
+        ).clamp(-args.noise_clip, args.noise_clip)
     if args.cube_domain_randomization:
-        rand_fre=200    
-        cube_pos_offset=(torch.randn(7,dtype=torch.float32,device=device)*args.cube_pos_noise).clamp(-args.noise_clip,args.noise_clip)
-
-
+        rand_fre = 200
+        cube_pos_offset = (
+            torch.randn(7, dtype=torch.float32, device=device) * args.cube_pos_noise
+        ).clamp(-args.noise_clip, args.noise_clip)
 
     # TRY NOT TO MODIFY: start the game
     global_step = 0
     start_time = time.time()
     next_obs = envs.reset()
-    next_obs[:,9:18]=0   #把电机速度mask掉
+    next_obs[:, 9:18] = 0  # 把电机速度mask掉
     next_done = torch.zeros(args.num_envs, dtype=torch.bool).to(device)
     print("start ppo training")
     print(f"num_env:{args.num_envs}")
-    print(f'num_iterations:{args.num_iterations}\t ')
+    print(f"num_iterations:{args.num_iterations}\t ")
     print(f"track:{args.track}wandb:{cli_args.wandb_log}")
     print(f"device:{device}")
-    print("v_coef",args.vf_coef)
-    print('action_randomazition:',args.action_domain_randomization)
-    print('cube_randomazition:',args.cube_domain_randomization)
+    print("v_coef", args.vf_coef)
+    print("action_randomazition:", args.action_domain_randomization)
+    print("cube_randomazition:", args.cube_domain_randomization)
 
-
-    
-    for iteration in trange(1, args.num_iterations + 1,desc="num_iterations"):
+    for iteration in trange(1, args.num_iterations + 1, desc="num_iterations"):
         # Annealing the rate if instructed to do so.
         if args.anneal_lr:
             frac = 1.0 - (iteration - 1.0) / args.num_iterations
-            lrnow = max(frac * args.learning_rate,args.min_learning_rate)
+            lrnow = max(frac * args.learning_rate, args.min_learning_rate)
 
             optimizer.param_groups[0]["lr"] = lrnow
 
         for step in range(0, args.num_steps):
-            
             global_step += args.num_envs
             obs[step] = next_obs
             dones[step] = next_done
@@ -434,20 +462,26 @@ def train(hydra_cfg):
             actions[step] = action
             logprobs[step] = logprob
             if args.action_domain_randomization:
-                if global_step%rand_fre==0:
-                    dof_offset=(torch.randn(9,dtype=torch.float32,device=device)*args.action_noise).clamp(-args.noise_clip,args.noise_clip)
+                if global_step % rand_fre == 0:
+                    dof_offset = (
+                        torch.randn(9, dtype=torch.float32, device=device)
+                        * args.action_noise
+                    ).clamp(-args.noise_clip, args.noise_clip)
                     # cube_pos_offset=(torch.randn(7,dtype=torch.float32,device=device))*0.1/2
-                action[:,0:9]+=dof_offset
+                action[:, 0:9] += dof_offset
             # TRY NOT TO MODIFY: execute the game and log data.
             next_obs, rewards[step], next_done, info = envs.step(action)
-            next_obs[:,9:18]=0
+            next_obs[:, 9:18] = 0
             if args.cube_domain_randomization:
-                if global_step%rand_fre==0:
-                    cube_pos_offset=(torch.randn(7,dtype=torch.float32,device=device)*args.cube_pos_noise).clamp(-args.noise_clip,args.noise_clip)
-                next_obs[:,18:25]+=cube_pos_offset
-            #print(rewards[step])  
-            
-            #print(envs.dof_position)
+                if global_step % rand_fre == 0:
+                    cube_pos_offset = (
+                        torch.randn(7, dtype=torch.float32, device=device)
+                        * args.cube_pos_noise
+                    ).clamp(-args.noise_clip, args.noise_clip)
+                next_obs[:, 18:25] += cube_pos_offset
+            # print(rewards[step])
+
+            # print(envs.dof_position)
             """  
             if 0 <= step <= 2:
                 for idx, d in enumerate(next_done):
@@ -475,10 +509,14 @@ def train(hydra_cfg):
                 else:
                     nextnonterminal = ~dones[t + 1]
                     nextvalues = values[t + 1]
-                
-                delta = rewards[t] + args.gamma * nextvalues * nextnonterminal - values[t]
-                advantages[t] = lastgaelam = delta + args.gamma * args.gae_lambda * nextnonterminal * lastgaelam
-                
+
+                delta = (
+                    rewards[t] + args.gamma * nextvalues * nextnonterminal - values[t]
+                )
+                advantages[t] = lastgaelam = (
+                    delta + args.gamma * args.gae_lambda * nextnonterminal * lastgaelam
+                )
+
             returns = advantages + values
             # print("rewards",rewards[-10:])
             # print("values",values[-10:])
@@ -499,7 +537,9 @@ def train(hydra_cfg):
                 end = start + args.minibatch_size
                 mb_inds = b_inds[start:end]
 
-                _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs[mb_inds], b_actions[mb_inds])
+                _, newlogprob, entropy, newvalue = agent.get_action_and_value(
+                    b_obs[mb_inds], b_actions[mb_inds]
+                )
                 logratio = newlogprob - b_logprobs[mb_inds]
                 ratio = logratio.exp()
 
@@ -507,15 +547,21 @@ def train(hydra_cfg):
                     # calculate approx_kl http://joschu.net/blog/kl-approx.html
                     old_approx_kl = (-logratio).mean()
                     approx_kl = ((ratio - 1) - logratio).mean()
-                    clipfracs += [((ratio - 1.0).abs() > args.clip_coef).float().mean().item()]
+                    clipfracs += [
+                        ((ratio - 1.0).abs() > args.clip_coef).float().mean().item()
+                    ]
 
                 mb_advantages = b_advantages[mb_inds]
                 if args.norm_adv:
-                    mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
+                    mb_advantages = (mb_advantages - mb_advantages.mean()) / (
+                        mb_advantages.std() + 1e-8
+                    )
 
                 # Policy loss
                 pg_loss1 = -mb_advantages * ratio
-                pg_loss2 = -mb_advantages * torch.clamp(ratio, 1 - args.clip_coef, 1 + args.clip_coef)
+                pg_loss2 = -mb_advantages * torch.clamp(
+                    ratio, 1 - args.clip_coef, 1 + args.clip_coef
+                )
                 pg_loss = torch.max(pg_loss1, pg_loss2).mean()
 
                 # Value loss
@@ -532,7 +578,7 @@ def train(hydra_cfg):
                     v_loss = 0.5 * v_loss_max.mean()
                 else:
                     v_loss = 0.5 * ((newvalue - b_returns[mb_inds]) ** 2).mean()
-                
+
                 entropy_loss = entropy.mean()
                 loss = pg_loss - args.ent_coef * entropy_loss + v_loss * args.vf_coef
                 # print(f"loss:{loss}pg_loss:{pg_loss}v_loss:{v_loss}")
@@ -543,11 +589,13 @@ def train(hydra_cfg):
 
             if args.target_kl is not None and approx_kl > args.target_kl:
                 break
-        
+
         # TRY NOT TO MODIFY: record rewards for plotting purposes
-        writer.add_scalar("reward",torch.mean(rewards).item(),global_step)
+        writer.add_scalar("reward", torch.mean(rewards).item(), global_step)
         writer.add_scalar("losses/loss", loss.item(), global_step)
-        writer.add_scalar("charts/learning_rate", optimizer.param_groups[0]["lr"], global_step)
+        writer.add_scalar(
+            "charts/learning_rate", optimizer.param_groups[0]["lr"], global_step
+        )
         writer.add_scalar("losses/value_loss", v_loss.item(), global_step)
         writer.add_scalar("losses/policy_loss", pg_loss.item(), global_step)
         writer.add_scalar("losses/entropy", entropy_loss.item(), global_step)
@@ -556,10 +604,15 @@ def train(hydra_cfg):
         writer.add_scalar("losses/clipfrac", np.mean(clipfracs), global_step)
         # print("-"*20)
         # print(f"iteration:{iteration}")
-        #print("SPS:", int(global_step / (time.time() - start_time)))
-        writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
+        # print("SPS:", int(global_step / (time.time() - start_time)))
+        writer.add_scalar(
+            "charts/SPS", int(global_step / (time.time() - start_time)), global_step
+        )
         if iteration % 30 == 0:
-            torch.save(agent.state_dict(), './PPO_continuous_itera{}.pth'.format(iteration))
+            torch.save(
+                agent.state_dict(),
+                f"{Path(__file__).parents[3]}/trained_models/ppo/PPO_continuous_itera{iteration}.pth",
+            )
 
     # envs.close()
     writer.close()
